@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tap2me – Tạo trang cho khách</title>
+<style>
+:root{--bg:#f7f0e6;--card:#fff;--ink:#3d2e28;--soft:#7a6258;--rose:#9e3148;--line:#e4d6c5}
+@media(prefers-color-scheme:dark){:root{--bg:#231b18;--card:#33271f;--ink:#f3e6dc;--soft:#b9a595;--rose:#e58aa0;--line:#4d3b30}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif;padding:16px}
+main{max-width:720px;margin:auto}h1{font-size:1.3rem;margin:.2em 0 1em}h2{font-size:1rem;margin:0 0 10px;color:var(--rose)}
+.c{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:.8rem;color:var(--soft);margin:8px 0 3px}
+input,textarea,select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit}
+textarea{min-height:80px}.row{display:flex;gap:8px;align-items:flex-end}.row>*{flex:1}
+button{background:var(--rose);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;cursor:pointer}
+button.g{background:transparent;color:var(--rose);border:1px solid var(--rose)}button:disabled{opacity:.5}
+.slot{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:center;margin-bottom:10px}
+.slot img{width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--line)}
+.hint{font-size:.78rem;color:var(--soft)}#log{white-space:pre-wrap;font:.8rem/1.5 monospace;color:var(--soft)}
+#link{word-break:break-all;font-weight:600}.hide{display:none}
+</style></head><body><main>
+<h1>💌 Tạo trang cho khách</h1>
+
+<!-- BƯỚC 1: TOKEN (mỗi máy nhập 1 lần) -->
+<section class="c" id="setup">
+  <h2>1. Kết nối GitHub (mỗi máy nhập 1 lần)</h2>
+  <label>Token GitHub (fine-grained, quyền Contents: Read and write cho repo)</label>
+  <input id="tk" type="password" placeholder="github_pat_...">
+  <div class="row"><div><label>Tài khoản</label><input id="ow" value="tap2menfckeychain"></div>
+  <div><label>Tên repo</label><input id="rp" value="relationship"></div></div>
+  <p><button id="saveTk">Lưu trên máy này</button></p>
+</section>
+
+<div id="app" class="hide">
+<p class="hint">Đã kết nối <b id="who"></b> · <a href="#" id="chg" style="color:var(--rose)">đổi token</a></p>
+
+<!-- BƯỚC 2: TÊN KHÁCH -->
+<section class="c"><h2>2. Tên khách → đường link</h2>
+  <div class="row"><div><input id="slug" placeholder="vd: minh-anh"></div><button class="g" id="load" style="flex:0 0 auto">Mở khách cũ</button></div>
+  <p class="hint">Link: <span id="prev"></span></p>
+</section>
+
+<!-- BƯỚC 3: NỘI DUNG -->
+<section class="c"><h2>3. Lời nhắn &amp; chữ trên trang</h2><div id="texts"></div></section>
+
+<section class="c"><h2>4. Ảnh (ảnh 1 to nhất, tối đa 5)</h2><div id="slots"></div>
+  <p class="hint">Ảnh tự thu nhỏ còn 1600px để trang tải nhanh. Không chọn file = giữ ảnh cũ.</p></section>
+
+<section class="c"><h2>5. Video</h2>
+  <input type="file" id="vid" accept="video/*"><p class="hint" id="vst"></p>
+  <p class="hint">Nên dưới 50MB (GitHub chặn trên 100MB).</p></section>
+
+<section class="c"><h2>5b. Nhạc (khách yêu cầu mới cần)</h2>
+  <label>Tên bài hát</label><input id="f_song" value="Photograph – Ed Sheeran">
+  <label>Link nhạc trực tiếp (đuôi .mp3, .m4a...)</label><input id="f_mus" placeholder="https://.../bai-hat.mp3">
+  <label>Hoặc tải file nhạc lên</label><input type="file" id="mus" accept="audio/*">
+  <p class="hint">Để trống cả hai = dùng bài mặc định. Link YouTube/Spotify/Zing không phát được, cần link file mp3 trực tiếp hoặc tải file lên (dưới 95MB).</p></section>
+
+<section class="c"><h2>6. Mặt dây chuyền &amp; thẻ ID (chọn ảnh nào)</h2><div id="picks"></div></section>
+
+<section class="c"><button id="go" style="width:100%">🚀 Đăng lên GitHub</button>
+  <p id="link"></p><div id="log"></div></section>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const LS=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const SS=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+let cfg={t:LS('gh_t')||'',o:LS('gh_o')||'tap2menfckeychain',r:LS('gh_r')||'relationship'};
+const RESERVED=['images','fonts','video','music','nhat-ky'];
+
+/* ---- ô nhập ---- */
+const TEXTS=[
+ ['loiMo','Lời mở ngoài phong bì','Có một lá thư dành cho bạn'],
+ ['ve','Chữ trên vé (dùng &lt;br&gt; để xuống dòng)','Celebrating<br>our love'],
+ ['ngay','Ngày','28 · 06'],['tieuDe','Tiêu đề album','Our little moments'],
+ ['phuDe','Phụ đề','những khoảnh khắc mình muốn giữ mãi'],
+ ['loiNhan','Lời nhắn trên giấy note','Cảm ơn vì đã cùng nhau viết nên những trang đẹp nhất.','area'],
+ ['kyTen','Ký tên','— yours, always'],['n1','Tên người 1 (nhật ký)','Anh'],['n2','Tên người 2 (nhật ký)','Em'],
+ ['nk','Link Apps Script nhật ký (để trống, thêm sau cũng được)','']];
+const PICKS=[['m1','Dây chuyền – ảnh trái',5],['m2','Dây chuyền – ảnh phải',2],
+ ['c1a','Thẻ ID mặt trước – ảnh',4],['c2a','Thẻ ID mặt sau – ảnh',3]];
+const CARDS=[['c1t','Thẻ trước – tiêu đề','♡ I LOVE YOU FOREVER! ♡'],['c1n','Thẻ trước – tên','Tên của bạn'],['c1d','Thẻ trước – ngày','2025'],
+ ['c2t','Thẻ sau – tiêu đề','(100%) BEST FRIENDS CLUB'],['c2n','Thẻ sau – tên','Gabriella'],['c2d','Thẻ sau – ngày','2025']];
+
+$('texts').innerHTML=[...TEXTS,...CARDS].map(([k,l,v,t])=>`<label>${l}</label>`+(t?`<textarea id="f_${k}">${v}</textarea>`:`<input id="f_${k}" value="${v.replace(/"/g,'&quot;')}">`)).join('');
+const opt=n=>[1,2,3,4,5].map(i=>`<option value="${i}"${i==n?' selected':''}>Ảnh ${i}</option>`).join('');
+$('picks').innerHTML=PICKS.map(([k,l,n])=>`<label>${l}</label><select id="f_${k}">${opt(n)}</select>`).join('');
+
+const slots=[0,1,2,3,4].map(i=>({path:'',file:null,cap:''}));
+$('slots').innerHTML=slots.map((s,i)=>`<div class="slot"><img id="im${i}"><div>
+ <input type="file" accept="image/*" data-i="${i}"><input id="cp${i}" placeholder="Chú thích ảnh ${i+1} (có thể để trống)"></div></div>`).join('');
+document.querySelectorAll('input[type=file][data-i]').forEach(inp=>inp.onchange=()=>{
+  const i=+inp.dataset.i,f=inp.files[0];slots[i].file=f||null;
+  if(f)$('im'+i).src=URL.createObjectURL(f);});
+let vPath='',musPath='';$('vid').onchange=()=>{$('vst').textContent=$('vid').files[0]?'Sẽ tải lên: '+$('vid').files[0].name:''};
+
+/* ---- slug ---- */
+const slugify=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const url=()=>`https://${cfg.o}.github.io/${cfg.r}/${slugify($('slug').value)}`;
+$('slug').oninput=()=>{$('prev').textContent=slugify($('slug').value)?url():''};
+
+/* ---- token ---- */
+function boot(){const ok=!!cfg.t;$('setup').classList.toggle('hide',ok);$('app').classList.toggle('hide',!ok);
+  $('who').textContent=cfg.o+'/'+cfg.r;$('tk').value='';$('ow').value=cfg.o;$('rp').value=cfg.r;}
+$('saveTk').onclick=()=>{const t=$('tk').value.trim();if(!t)return alert('Dán token vào đã nhé.');
+  cfg={t,o:$('ow').value.trim(),r:$('rp').value.trim()};SS('gh_t',t);SS('gh_o',cfg.o);SS('gh_r',cfg.r);boot();};
+$('chg').onclick=e=>{e.preventDefault();$('setup').classList.remove('hide');};
+boot();
+
+/* ---- GitHub API ---- */
+const H=a=>({Authorization:'Bearer '+cfg.t,Accept:a||'application/vnd.github+json','Content-Type':'application/json'});
+const base=()=>`https://api.github.com/repos/${cfg.o}/${cfg.r}`;
+async function api(p,method,body){const r=await fetch(base()+p,{method:method||'GET',headers:H(),body:body&&JSON.stringify(body)});
+  if(!r.ok)throw new Error(r.status+(r.status==401?' (token sai/hết hạn)':r.status==404?' (sai repo hoặc token thiếu quyền)':'')+' '+(await r.text()).slice(0,150));return r.json();}
+async function raw(path,ref){const r=await fetch(`${base()}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`,{headers:H('application/vnd.github.raw+json')});
+  return r.ok?r.text():null;}
+const log=t=>{$('log').textContent+=t+'\n'};
+const b64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
+async function shrink(f){try{const b=await createImageBitmap(f),s=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');
+  c.width=Math.round(b.width*s);c.height=Math.round(b.height*s);c.getContext('2d').drawImage(b,0,0,c.width,c.height);
+  return await new Promise(r=>c.toBlob(r,'image/jpeg',.85));}catch(e){return f}}
+const ext=(f,d)=>f.type==='image/jpeg'?'jpg':((f.name||'').split('.').pop()||d).toLowerCase();
+
+/* ---- mở khách cũ ---- */
+$('load').onclick=async()=>{const s=slugify($('slug').value);if(!s)return alert('Nhập tên khách trước.');
+  try{const br=(await api('')).default_branch,t=await raw(s+'/data.json',br);if(!t)return alert('Chưa có khách tên "'+s+'" – cứ điền mới rồi đăng.');
+  const d=JSON.parse(t),set=(k,v)=>{if(v!=null)$('f_'+k).value=v};
+  ['loiMo','ngay','tieuDe','phuDe','loiNhan','kyTen'].forEach(k=>set(k,d[k]));set('ve',d.ve);
+  set('n1',d.nguoi?.[0]);set('n2',d.nguoi?.[1]);set('nk',d.nhatKyUrl||'');
+  const idx=p=>{const i=d.anh.findIndex(a=>a.src===p);return i<0?1:i+1};
+  d.anh.forEach((a,i)=>{if(i<5){slots[i].path=a.src;$('cp'+i).value=a.chuThich||'';$('im'+i).src=`https://${cfg.o}.github.io/${cfg.r}/${a.src}`}});
+  set('m1',idx(d.mayDay[0]));set('m2',idx(d.mayDay[1]));set('c1a',idx(d.the1.anh));set('c2a',idx(d.the2.anh));
+  set('c1t',d.the1.tieuDe);set('c1n',d.the1.ten);set('c1d',d.the1.ngay);set('c2t',d.the2.tieuDe);set('c2n',d.the2.ten);set('c2d',d.the2.ngay);
+  vPath=d.video||'';musPath=d.nhac||'';set('song',d.tenBaiHat);set('mus',/^https?:/.test(musPath)?musPath:'');$('vst').textContent=vPath?'Đang dùng video: '+vPath:'';alert('Đã nạp dữ liệu khách "'+s+'".');
+  }catch(e){alert('Lỗi: '+e.message)}};
+
+/* ---- ĐĂNG ---- */
+$('go').onclick=async()=>{
+  const s=slugify($('slug').value);
+  if(!s)return alert('Nhập tên khách (bước 2).');
+  if(RESERVED.includes(s))return alert('Tên này trùng thư mục hệ thống, chọn tên khác.');
+  if(!slots.some(x=>x.file||x.path))return alert('Cần ít nhất 1 ảnh.');
+  const vf=$('vid').files[0];if(vf&&vf.size>95*1024*1024)return alert('Video quá lớn (>95MB), hãy nén nhỏ lại.');
+  $('go').disabled=true;$('log').textContent='';$('link').textContent='';
+  try{
+    const v='?v='+Date.now(),files=[];   // [{path, blob sha}]
+    log('Đọc repo...');const br=(await api('')).default_branch;
+    const tpl=await raw('index.html',br);
+    if(!tpl)throw new Error('Repo chưa có index.html mẫu ở thư mục gốc.');
+    if(!tpl.includes('"./data.json?v="'))throw new Error('index.html mẫu khác bản cũ, không tìm thấy dòng đọc data.json.');
+    const page=tpl.replace('<head>','<head>\n<base href="../">').replace('"./data.json?v="','"'+s+'/data.json?v="');
+    const put=async(path,f,isText)=>{const r=await api('/git/blobs','POST',isText?{content:f,encoding:'utf-8'}:{content:await b64(f),encoding:'base64'});files.push({path,mode:'100644',type:'blob',sha:r.sha});};
+
+    const src=[];                                   // đường dẫn cuối cùng của từng ảnh
+    for(let i=0;i<5;i++){const x=slots[i];
+      if(x.file){log('Xử lý ảnh '+(i+1)+'...');const b=await shrink(x.file),p=`${s}/images/anh-${i+1}.${ext(b,'jpg')}`;await put(p,b);src[i]=p+v;}
+      else src[i]=x.path||'';}
+    let video=vPath;
+    if(vf){log('Tải video ('+(vf.size/1048576).toFixed(1)+'MB)...');const p=`${s}/video/video.${ext(vf,'mp4')}`;await put(p,vf);video=p+v;}
+    const mf=$('mus').files[0],ml=$('f_mus').value.trim();
+    let nhac=(musPath&&!/^https?:/.test(musPath))?musPath:'music/Ed Sheeran - Photograph (Lyrics).mp3';
+    if(mf){if(mf.size>95*1024*1024)throw new Error('File nhạc quá lớn (>95MB).');log('Tải nhạc...');const p=`${s}/music/nhac.${ext(mf,'mp3')}`;await put(p,mf);nhac=p+v;}
+    else if(ml){if(/youtube|youtu\.be|spotify|zingmp3|nhaccuatui|soundcloud/i.test(ml))throw new Error('Link nhạc phải là file mp3 trực tiếp, không dùng link YouTube/Spotify/Zing...');nhac=ml;}
+    const first=src.find(Boolean),of=n=>src[n-1]||first,g=k=>$('f_'+k).value;
+    const anh=src.map((p,i)=>p&&{src:p,chuThich:$('cp'+i).value.trim()}).filter(Boolean);
+    const data={loiMo:g('loiMo'),ve:g('ve'),ngay:g('ngay'),tieuDe:g('tieuDe'),phuDe:g('phuDe'),video,
+      nhac,tenBaiHat:g('song'),anh,
+      mayDay:[of(+g('m1')),of(+g('m2'))],
+      the1:{tieuDe:g('c1t'),anh:of(+g('c1a')),ten:g('c1n'),ngay:g('c1d')},
+      the2:{tieuDe:g('c2t'),anh:of(+g('c2a')),ten:g('c2n'),ngay:g('c2d')},
+      loiNhan:g('loiNhan'),kyTen:g('kyTen'),nguoi:[g('n1')||'Anh',g('n2')||'Em'],nhatKyUrl:g('nk').trim()};
+    await put(s+'/data.json',JSON.stringify(data,null,2),true);
+    await put(s+'/index.html',page,true);
+
+    log('Tạo commit...');
+    const ref=await api('/git/ref/heads/'+br),cm=await api('/git/commits/'+ref.object.sha);
+    const tree=await api('/git/trees','POST',{base_tree:cm.tree.sha,tree:files});
+    const nc=await api('/git/commits','POST',{message:'Cập nhật trang khách '+s,tree:tree.sha,parents:[ref.object.sha]});
+    await api('/git/refs/heads/'+br,'PATCH',{sha:nc.sha});
+    slots.forEach((x,i)=>{x.path=src[i];x.file=null});vPath=video;musPath=nhac;$('mus').value='';
+    log('✅ Xong! GitHub Pages cần ~1 phút để cập nhật.');
+    $('link').innerHTML=`Link khách: <a href="${url()}/" target="_blank" style="color:var(--rose)">${url()}</a>`;
+  }catch(e){log('❌ '+e.message)}
+  $('go').disabled=false;};
+</script></body></html>
